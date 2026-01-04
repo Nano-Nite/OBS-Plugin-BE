@@ -2,20 +2,17 @@ package main
 
 import (
 	"log"
-	"main/db"
+	"main/helper"
 	"os"
 
 	"github.com/gofiber/fiber/v2"
 )
 
 func main() {
-	db.InitDB()
+	helper.InitDB()
 
 	app := fiber.New()
-
-	app.Get("/", func(c *fiber.Ctx) error {
-		return c.SendString("Ready to GO!!!!!!!!")
-	})
+	helper.InitRoute(app)
 
 	port := os.Getenv("PORT")
 	if port == "" {
