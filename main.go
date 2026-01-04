@@ -1,24 +1,24 @@
 package main
 
 import (
-        "log"
-        "os"
+	"log"
+	"os"
 
-        "github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2"
 )
 
 func main() {
-        app := fiber.New()
+	app := fiber.New()
 
-        app.Get("/", func(c *fiber.Ctx) error {
-                return c.SendString("Hello, World!")
-        })
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.SendString("Ready to GO!!!!!!!!")
+	})
 
-        port := os.Getenv("PORT")
-        if port == "" {
-                port = "5000"
-        }
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "5000"
+	}
 
-        log.Println("Listening on port", port)
-        app.Listen(":" + port)
+	log.Println("Listening on port", port)
+	app.Listen(":" + port)
 }

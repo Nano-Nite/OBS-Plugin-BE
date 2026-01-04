@@ -20,3 +20,6 @@ gopath/
 
 # Go workspace file
 go.work
+
+# User-specific files
+*.env
