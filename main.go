@@ -31,7 +31,8 @@ func InitENV() {
 	// Environment variable initialization logic goes here
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Error loading .env file")
+		log.Println("Error loading .env file")
+		return
 	}
 
 	for _, env := range os.Environ() {
