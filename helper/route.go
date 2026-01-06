@@ -29,18 +29,7 @@ func InitRoute(app *fiber.App) {
 		for k, v := range c.GetReqHeaders() {
 			log.Printf("%s: %s", k, v)
 		}
-
-		var prettyJSON map[string]interface{}
-
-		if err := json.Unmarshal(c.Body(), &prettyJSON); err != nil {
-			log.Println("Invalid JSON body:", err)
-			log.Println("Raw body:", string(c.Body()))
-			return c.SendStatus(fiber.StatusBadRequest)
-		}
-
-		pretty, _ := json.MarshalIndent(prettyJSON, "", "  ")
-		log.Println("JSON BODY:")
-		log.Println(string(pretty))
+		log.Println(string(c.Body()))
 
 		UserInfo := new(model.UserInfo)
 		return c.Status(200).JSON(UserInfo)
