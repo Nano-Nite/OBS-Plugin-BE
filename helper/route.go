@@ -18,6 +18,12 @@ func InitRoute(app *fiber.App) {
 		return c.SendString("Ready to GO!!!!!!!!")
 	})
 
+	app.Post("/debug", func(c *fiber.Ctx) error {
+		log.Println("POST request received at /debug")
+		UserInfo := new(model.UserInfo)
+		return c.Status(200).JSON(UserInfo)
+	})
+
 	app.Post("/email/webhook", func(c *fiber.Ctx) error {
 		log.Println("POST request received at /email/webhook")
 		Email := new(model.EmailWebhook)
