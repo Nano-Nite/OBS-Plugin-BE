@@ -20,6 +20,28 @@ func InitRoute(app *fiber.App) {
 
 	app.Post("/debug", func(c *fiber.Ctx) error {
 		log.Println("POST request received at /debug")
+
+		headers := make(map[string]string)
+		c.Context().Request.Header.VisitAll(func(key, value []byte) {
+			headers[string(key)] = string(value)
+		})
+
+		for k, v := range c.GetReqHeaders() {
+			log.Printf("%s: %s", k, v)
+		}
+
+		var prettyJSON map[string]interface{}
+
+		if err := json.Unmarshal(c.Body(), &prettyJSON); err != nil {
+			log.Println("Invalid JSON body:", err)
+			log.Println("Raw body:", string(c.Body()))
+			return c.SendStatus(fiber.StatusBadRequest)
+		}
+
+		pretty, _ := json.MarshalIndent(prettyJSON, "", "  ")
+		log.Println("JSON BODY:")
+		log.Println(string(pretty))
+
 		UserInfo := new(model.UserInfo)
 		return c.Status(200).JSON(UserInfo)
 	})
