@@ -78,7 +78,7 @@ func InitRoute(app *fiber.App) {
 			return c.Status(401).SendString("Unauthorized")
 		}
 
-		// prevent user not buying product to login
+		// prevent user not buying the product to login
 		var purchaseOrder []*model.PurchaseOrder
 		log.Printf("Searching for purchase order with email: %s", LoginPayload.Email)
 		err = pgxscan.Select(c.Context(), DB, &purchaseOrder, "SELECT * FROM purchase_order WHERE email=$1", LoginPayload.Email)
@@ -130,10 +130,31 @@ func InitRoute(app *fiber.App) {
 					return c.Status(500).SendString("Internal Server Error")
 				}
 			}
-
 		}
 
-		return c.Status(200).JSON(LoginPayload.Email)
+		// fetch product
+		var products []*model.Product
+		log.Printf("Searching for product with email: %s", LoginPayload.Email)
+		q := `SELECT distinct on (item) 
+				split_part(item.value, ' - ', 1) AS item,
+				pr.url
+				FROM purchase_order p
+				JOIN LATERAL json_array_elements_text(p.orders) AS item(value)
+				ON TRUE
+				left join product pr on lower(pr.code) = lower(split_part(item.value, ' - ', 1))
+				where p.email = $1`
+
+		err = pgxscan.Select(c.Context(), DB, &products, q, LoginPayload.Email)
+		if err != nil {
+			log.Println("POST request received at /login : Error fetching products -", err.Error())
+			return c.Status(500).SendString("Internal Server Error")
+		}
+
+		result := make(map[string]interface{})
+		result["email"] = LoginPayload.Email
+		result["products"] = products
+
+		return c.Status(200).JSON(result)
 	})
 
 	app.Post("/email/webhook", func(c *fiber.Ctx) error {

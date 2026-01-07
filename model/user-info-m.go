@@ -40,3 +40,8 @@ type PurchaseOrder struct {
 	TriggerWA bool            `db:"trigger_wa" json:"trigger_wa"`
 	CreatedAt time.Time       `db:"created_at" json:"created_at"`
 }
+
+type Product struct {
+	Item string `db:"item" json:"item"`
+	URL  string `db:"url" json:"url"`
+}
