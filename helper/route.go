@@ -356,7 +356,13 @@ func InitRoute(app *fiber.App) {
 			}
 
 			fmt.Printf("%s", AddDaysFromNextMidnight(time.Now(), Product[0].AddedDuration))
-			_, err = tx.Exec(context.Background(), "UPDATE users SET subs_until=$1 WHERE id=$2", AddDaysFromNextMidnight(time.Now(), Product[0].AddedDuration), User.ID)
+			qa := `UPDATE users SET subs_until = CASE
+						WHEN subs_until IS NULL OR subs_until < $1::timestamptz
+						THEN $1::timestamptz + concat($2::varchar, ' days')::interval
+						ELSE subs_until + concat($2::varchar, ' days')::interval
+					END
+					WHERE id=$3`
+			_, err = tx.Exec(context.Background(), qa, getCurrentTime(), Product[0].AddedDuration, User.ID)
 			if err != nil {
 				log.Println("POST request received at /webhook : Failed to Update subs_until - ", err.Error())
 				_ = tx.Rollback(ctx)
