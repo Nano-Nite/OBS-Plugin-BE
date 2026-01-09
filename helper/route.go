@@ -284,15 +284,14 @@ func InitRoute(app *fiber.App) {
 		User.Email = WebhookPayload.Data.MessageData.Customer.Email
 		User.Phone = WebhookPayload.Data.MessageData.Customer.Phone
 		User.IsTrial = false
-		User.SubsUntil = AddDaysFromNextMidnight(time.Now(), 30)
 		User.LastPurchase = getCurrentTime()
 		User.CreatedAt = getCurrentTime()
 
 		err = tx.QueryRow(
 			context.Background(),
 			`
-			INSERT INTO "user" (name, email, phone, is_trial, trial_until, subs_until, last_purchase, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			INSERT INTO "users" (name, email, phone, is_trial, trial_until, last_purchase, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
 			ON CONFLICT (email) 
 			DO UPDATE SET
 				last_purchase = EXCLUDED.last_purchase
@@ -303,7 +302,6 @@ func InitRoute(app *fiber.App) {
 			User.Phone,
 			User.IsTrial,
 			nil,
-			User.SubsUntil,
 			User.LastPurchase,
 			User.CreatedAt,
 		).Scan(&User.ID)
@@ -350,6 +348,17 @@ func InitRoute(app *fiber.App) {
 			_, err = tx.Exec(context.Background(), "INSERT INTO purchase_order (user_id, product_id, message_id, trigger_wa, created_at) VALUES ($1, $2, $3, $4, $5)", PurchaseOrder.UserID, PurchaseOrder.ProductID, PurchaseOrder.MessageID, PurchaseOrder.TriggerWA, PurchaseOrder.CreatedAt)
 			if err != nil {
 				log.Println("POST request received at /webhook : Fail insert Purchase Order - ", err.Error())
+				_ = tx.Rollback(ctx)
+				return c.Status(500).JSON(fiber.Map{
+					"success": false,
+					"error":   err.Error(),
+				})
+			}
+
+			fmt.Printf("%s", AddDaysFromNextMidnight(time.Now(), Product[0].AddedDuration))
+			_, err = tx.Exec(context.Background(), "UPDATE users SET subs_until=$1 WHERE id=$2", AddDaysFromNextMidnight(time.Now(), Product[0].AddedDuration), User.ID)
+			if err != nil {
+				log.Println("POST request received at /webhook : Failed to Update subs_until - ", err.Error())
 				_ = tx.Rollback(ctx)
 				return c.Status(500).JSON(fiber.Map{
 					"success": false,
