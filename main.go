@@ -12,6 +12,7 @@ import (
 )
 
 func main() {
+	log.Println("Build : 1.0.0")
 	InitENV()
 	helper.InitDB()
 

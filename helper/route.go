@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"log"
 	"main/model"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/gofiber/fiber/v2"
@@ -157,6 +160,7 @@ func InitRoute(app *fiber.App) {
 		return c.Status(200).JSON(result)
 	})
 
+	// will be deprecated
 	app.Post("/email/webhook", func(c *fiber.Ctx) error {
 		log.Println("POST request received at /email/webhook")
 		Email := new(model.EmailWebhook)
@@ -232,5 +236,133 @@ func InitRoute(app *fiber.App) {
 		}
 
 		return c.Status(200).JSON(UserInfo)
+	})
+
+	app.Post("/webhook", func(c *fiber.Ctx) error {
+		log.Println("POST request received at /webhook")
+
+		headers := make(map[string]string)
+		c.Context().Request.Header.VisitAll(func(key, value []byte) {
+			headers[string(key)] = string(value)
+		})
+
+		for k, v := range c.GetReqHeaders() {
+			log.Printf("%s: %s", k, v)
+		}
+		log.Println(string(c.Body()))
+
+		log.Println("POST request received at /webhook")
+		WebhookPayload := new(model.WebhookPayload)
+		if err := c.BodyParser(WebhookPayload); err != nil {
+			log.Println("POST request received at /webhook : Error parsing body -", err.Error())
+			return c.Status(400).SendString(err.Error())
+		}
+
+		// validation
+		if c.Get("X-Lynk-Signature") == "" {
+			log.Println("POST request received at /webhook : Unauthorized access attempt")
+			return c.Status(401).SendString("Unauthorized")
+		}
+		if !ValidateLynkSignature(WebhookPayload.Data.MessageData.RefID, strconv.Itoa(WebhookPayload.Data.MessageData.Totals.GrandTotal), WebhookPayload.Data.MessageID, c.Get("X-Lynk-Signature"), os.Getenv("LYNK_SIG")) {
+			log.Println("POST request received at /webhook : Unauthorized access attempt")
+			return c.Status(401).SendString("Unauthorized")
+		}
+
+		// DB logic
+		tx, err := DB.Begin(context.Background())
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer func() {
+			if err != nil {
+				_ = tx.Rollback(ctx)
+			}
+		}()
+
+		User := new(model.User)
+		User.Name = WebhookPayload.Data.MessageData.Customer.Name
+		User.Email = WebhookPayload.Data.MessageData.Customer.Email
+		User.Phone = WebhookPayload.Data.MessageData.Customer.Phone
+		User.IsTrial = false
+		User.SubsUntil = AddDaysFromNextMidnight(time.Now(), 30)
+		User.LastPurchase = getCurrentTime()
+		User.CreatedAt = getCurrentTime()
+
+		err = tx.QueryRow(
+			context.Background(),
+			`
+			INSERT INTO "user" (name, email, phone, is_trial, trial_until, subs_until, last_purchase, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			ON CONFLICT (email) 
+			DO UPDATE SET
+				last_purchase = EXCLUDED.last_purchase
+			RETURNING id
+			`,
+			User.Name,
+			User.Email,
+			User.Phone,
+			User.IsTrial,
+			nil,
+			User.SubsUntil,
+			User.LastPurchase,
+			User.CreatedAt,
+		).Scan(&User.ID)
+
+		if err != nil {
+			_ = tx.Rollback(ctx)
+			return c.Status(500).JSON(fiber.Map{
+				"success": false,
+				"error":   err.Error(),
+			})
+		}
+
+		// insert purchase order based on product data
+		for _, v := range WebhookPayload.Data.MessageData.Items {
+			log.Println(v)
+
+			var Product []*model.Product
+			log.Printf("Searching for product: %s", v.Title)
+			err = pgxscan.Select(c.Context(), DB, &Product, "SELECT * FROM product WHERE name=$1 limit 1", v.Title)
+			if err != nil {
+				log.Println("POST request received at /webhook : Error get data Product - ", err.Error())
+				_ = tx.Rollback(ctx)
+				return c.Status(500).JSON(fiber.Map{
+					"success": false,
+					"error":   err.Error(),
+				})
+			}
+			if len(Product) == 0 {
+				log.Println("POST request received at /webhook : Product not found - ", err.Error())
+				_ = tx.Rollback(ctx)
+				return c.Status(500).JSON(fiber.Map{
+					"success": false,
+					"error":   err.Error(),
+				})
+			}
+
+			PurchaseOrder := new(model.PurchaseOrder)
+			PurchaseOrder.UserID = User.ID
+			PurchaseOrder.ProductID = Product[0].ID
+			PurchaseOrder.MessageID = WebhookPayload.Data.MessageID
+			PurchaseOrder.TriggerWA = false
+			PurchaseOrder.CreatedAt = getCurrentTime()
+
+			_, err = tx.Exec(context.Background(), "INSERT INTO purchase_order (user_id, product_id, message_id, trigger_wa, created_at) VALUES ($1, $2, $3, $4, $5)", PurchaseOrder.UserID, PurchaseOrder.ProductID, PurchaseOrder.MessageID, PurchaseOrder.TriggerWA, PurchaseOrder.CreatedAt)
+			if err != nil {
+				log.Println("POST request received at /webhook : Fail insert Purchase Order - ", err.Error())
+				_ = tx.Rollback(ctx)
+				return c.Status(500).JSON(fiber.Map{
+					"success": false,
+					"error":   err.Error(),
+				})
+			}
+		}
+
+		err = tx.Commit(context.Background())
+		if err != nil {
+			return fmt.Errorf("commit tx: %w", err)
+		}
+
+		return c.Status(200).JSON(User)
 	})
 }
