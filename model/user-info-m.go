@@ -19,6 +19,7 @@ type User struct {
 	Name          string     `db:"name" json:"name"`
 	Email         string     `db:"email" json:"email"`
 	Phone         string     `db:"phone" json:"phone"`
+	SpecialGuest  bool       `db:"special_guest" json:"special_guest"`
 	IsTrial       bool       `db:"is_trial" json:"is_trial"`
 	TrialUntil    *time.Time `db:"trial_until" json:"trial_until"`
 	SubsUntil     time.Time  `db:"subs_until" json:"subs_until"`
