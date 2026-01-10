@@ -14,6 +14,7 @@ import (
 
 	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 )
 
 func InitRoute(app *fiber.App) {
@@ -43,121 +44,78 @@ func InitRoute(app *fiber.App) {
 
 	app.Post("/login", func(c *fiber.Ctx) error {
 		log.Println("POST request received at /login")
+		result := make(map[string]interface{})
+		result["status_code"] = "200"
+		result["message"] = ""
+		result["data"] = nil
+
+		LoginPayload := new(model.LoginPayload)
+		log.Println("Body : " + string(c.Body()))
+		if err := c.BodyParser(LoginPayload); err != nil {
+			log.Println("POST request received at /login : Error parsing body -", err.Error())
+			return ReturnResult(c, result, 500, "Internal server error", nil, false, nil, nil, nil)
+		}
+
+		var Users []*model.User
+		log.Printf("Searching for User with email: %s", LoginPayload.Email)
+		err := pgxscan.Select(c.Context(), DB, &Users, "SELECT * FROM users WHERE email=$1", LoginPayload.Email)
+		if err != nil {
+			log.Println("POST request received at /login : Error fetching Users -", err.Error())
+			return ReturnResult(c, result, 500, "Internal server error", nil, false, nil, nil, nil)
+		}
+		if len(Users) == 0 {
+			log.Println("POST request received at /login : No User for email:", LoginPayload.Email)
+			return ReturnResult(c, result, 400, "Bad Request", nil, false, nil, nil, nil)
+		}
 
 		if os.Getenv("ENV") != "development" && c.Get("postman-token") != "" {
 			log.Println("POST request received at /login : Unauthorized access attempt")
-			return c.Status(401).SendString("Unauthorized")
+			return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
 		}
 
 		if c.Get("x-device-id") == "" || c.Get("x-signature") == "" {
 			log.Println("POST request received at /login : missing device id or signature")
-			log.Println("Device ID : " + c.Get("x-device-id"))
-			log.Println("Signature : " + c.Get("x-signature"))
-
-			return c.Status(401).SendString("Unauthorized")
+			return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
 		}
+
 		HeaderLogin := new(model.HeaderLogin)
 		HeaderLogin.XDeviceID = c.Get("x-device-id")
 		HeaderLogin.XSignature = c.Get("x-signature")
-
-		LoginPayload := new(model.LoginPayload)
 		LoginPayload.Header = *HeaderLogin
-
-		log.Println("Body : " + string(c.Body()))
-		if err := c.BodyParser(LoginPayload); err != nil {
-			log.Println("POST request received at /login : Error parsing body -", err.Error())
-			return c.Status(400).SendString(err.Error())
-		}
-
 		sDecode, err := base64.StdEncoding.DecodeString(HeaderLogin.XSignature)
 		if err != nil {
 			log.Println("POST request received at /login : Error decoding signature -", err.Error())
-			return c.Status(400).SendString(err.Error())
+			return ReturnResult(c, result, 500, "Internal server error", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
 		}
 
 		splitSignature := strings.Split(string(sDecode), "|")
 		if len(splitSignature) != 3 || splitSignature[1] != LoginPayload.Email {
 			log.Println("POST request received at /login : Invalid signature")
-			return c.Status(401).SendString("Unauthorized")
+			return ReturnResult(c, result, 401, "Unathorized", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
 		}
 
 		// prevent user not buying the product to login
-		var purchaseOrder []*model.PurchaseOrder
-		log.Printf("Searching for purchase order with email: %s", LoginPayload.Email)
-		err = pgxscan.Select(c.Context(), DB, &purchaseOrder, "SELECT * FROM purchase_order WHERE email=$1", LoginPayload.Email)
-		if err != nil {
-			log.Println("POST request received at /login : Error fetching purchase order -", err.Error())
-			return c.Status(500).SendString("Internal Server Error")
-		}
-		if len(purchaseOrder) == 0 {
-			log.Println("POST request received at /login : No purchase order found for email:", LoginPayload.Email)
-			return c.Status(401).SendString("Unauthorized")
-		}
-
-		// get login log
-		var loginLog []*model.LoginLog
-		log.Printf("Searching for login log with email: %s", LoginPayload.Email)
-		err = pgxscan.Select(c.Context(), DB, &loginLog, "SELECT * FROM login_log WHERE email=$1", LoginPayload.Email)
-		if err != nil {
-			log.Println("POST request received at /login : Error fetching login log -", err.Error())
-			return c.Status(500).SendString("Internal Server Error")
-		}
-		if len(loginLog) == 0 {
-			// First time login, insert new record
-			_, err := DB.Exec(c.Context(), "INSERT INTO login_log (email, signature, device_id, failed_attempt, last_login, created_at) VALUES ($1, $2, $3, $4, $5, $6)", LoginPayload.Email, HeaderLogin.XSignature, HeaderLogin.XDeviceID, 0, getCurrentTime(), getCurrentTime())
-			if err != nil {
-				log.Println("POST request received at /login : Error inserting login log -", err.Error())
-				return c.Status(500).SendString("Internal Server Error")
-			}
-		}
-
-		if len(loginLog) >= 1 {
-			if loginLog[len(loginLog)-1].Signature != HeaderLogin.XSignature || loginLog[len(loginLog)-1].DeviceID != HeaderLogin.XDeviceID {
-				// Invalid login attempt
-				_, err := DB.Exec(c.Context(), "UPDATE login_log SET failed_attempt=failed_attempt+1 WHERE id=$1", loginLog[len(loginLog)-1].ID)
-				if err != nil {
-					log.Println("POST request received at /login : Error updating failed attempt -", err.Error())
-					return c.Status(500).SendString("Internal Server Error")
-				}
-
-				_, err = DB.Exec(c.Context(), "INSERT INTO login_log (email, signature, device_id, failed_attempt, last_login, created_at) VALUES ($1, $2, $3, $4, $5, $6)", LoginPayload.Email, HeaderLogin.XSignature, HeaderLogin.XDeviceID, 0, getCurrentTime(), getCurrentTime())
-				if err != nil {
-					log.Println("POST request received at /login : Error inserting login log -", err.Error())
-					return c.Status(500).SendString("Internal Server Error")
-				}
-			} else {
-				// Second time login, update new record
-				_, err := DB.Exec(c.Context(), "UPDATE login_log SET last_login=$1 WHERE id=$2", getCurrentTime(), loginLog[len(loginLog)-1].ID)
-				if err != nil {
-					log.Println("POST request received at /login : Error updating login log -", err.Error())
-					return c.Status(500).SendString("Internal Server Error")
-				}
-			}
+		if Users[0].SubsUntil.Before(getCurrentTime()) {
+			log.Println("POST request received at /login : User out of subscription: ", Users[0].SubsUntil.Format(time.RFC3339))
+			return ReturnResult(c, result, 402, "Payment Required", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
 		}
 
 		// fetch product
 		var products []*model.Product
-		log.Printf("Searching for product with email: %s", LoginPayload.Email)
-		q := `SELECT distinct on (item) 
-				split_part(item.value, ' - ', 1) AS item,
-				pr.url
-				FROM purchase_order p
-				JOIN LATERAL json_array_elements_text(p.orders) AS item(value)
-				ON TRUE
-				left join product pr on lower(pr.code) = lower(split_part(item.value, ' - ', 1))
-				where p.email = $1`
+		log.Println("Searching for products")
+		q := `SELECT * FROM product WHERE url is not null or url != ''`
 
-		err = pgxscan.Select(c.Context(), DB, &products, q, LoginPayload.Email)
+		err = pgxscan.Select(c.Context(), DB, &products, q)
 		if err != nil {
 			log.Println("POST request received at /login : Error fetching products -", err.Error())
-			return c.Status(500).SendString("Internal Server Error")
+			return ReturnResult(c, result, 500, "Internal server error", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+		}
+		if len(products) == 0 {
+			log.Println("POST request received at /login : No products")
+			return ReturnResult(c, result, 500, "Internal server error", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
 		}
 
-		result := make(map[string]interface{})
-		result["email"] = LoginPayload.Email
-		result["products"] = products
-
-		return c.Status(200).JSON(result)
+		return ReturnResult(c, result, 200, "Success", products, true, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
 	})
 
 	// will be deprecated
@@ -316,8 +274,6 @@ func InitRoute(app *fiber.App) {
 
 		// insert purchase order based on product data
 		for _, v := range WebhookPayload.Data.MessageData.Items {
-			log.Println(v)
-
 			var Product []*model.Product
 			log.Printf("Searching for product: %s", v.Title)
 			err = pgxscan.Select(c.Context(), DB, &Product, "SELECT * FROM product WHERE name=$1 limit 1", v.Title)
@@ -380,4 +336,56 @@ func InitRoute(app *fiber.App) {
 
 		return c.Status(200).JSON(User)
 	})
+}
+
+func ReturnResult(c *fiber.Ctx, result map[string]interface{}, statusCode int, message string, data interface{}, isSuccess bool, userId *uuid.UUID, sig *string, deviceID *string) error {
+	result["status_code"] = strconv.Itoa(statusCode)
+	result["message"] = message
+	result["data"] = data
+
+	LoginLog := new(model.LoginLog)
+	LoginLog.UserID = *userId
+	LoginLog.Signature = sig
+	LoginLog.DeviceID = deviceID
+	LoginLog.StatusCode = strconv.Itoa(statusCode)
+	LoginLog.Message = message
+	LoginLog.CreatedAt = getCurrentTime()
+
+	// update user attempt and insert login log
+	if !isSuccess {
+		if userId != nil {
+			_, err := DB.Exec(ctx, "UPDATE users SET failed_attempt = failed_attempt+1, login_attempt = login_attempt+1 where id=$1", userId)
+			if err != nil {
+				log.Println("POST request received at /login : Failed to update failed_attempt and login_attempt: ", userId)
+				result["status_code"] = strconv.Itoa(statusCode)
+				result["message"] = err.Error()
+				result["data"] = nil
+			}
+
+			_, err1 := DB.Exec(ctx, "INSERT INTO login_log (user_id, signature, device_id, status_code, message, created_at) VALUES ($1, $2, $3, $4, $5, $6)", LoginLog.UserID, LoginLog.Signature, LoginLog.DeviceID, LoginLog.StatusCode, LoginLog.Message, LoginLog.CreatedAt)
+			if err1 != nil {
+				log.Println("POST request received at /login : Failed to insert login_log : ", userId)
+				result["status_code"] = strconv.Itoa(statusCode)
+				result["message"] = err1.Error()
+				result["data"] = nil
+			}
+		}
+	} else {
+		_, err := DB.Exec(ctx, "UPDATE users SET login_attempt = login_attempt+1, last_login_at=$1 where id=$2", getCurrentTime(), userId)
+		if err != nil {
+			log.Println("POST request received at /login : Failed to update login_attempt: ", userId)
+			result["status_code"] = strconv.Itoa(statusCode)
+			result["message"] = err.Error()
+			result["data"] = nil
+		}
+		_, err1 := DB.Exec(ctx, "INSERT INTO login_log (user_id, signature, device_id, status_code, message, created_at) VALUES ($1, $2, $3, $4, $5, $6)", LoginLog.UserID, LoginLog.Signature, LoginLog.DeviceID, LoginLog.StatusCode, LoginLog.Message, LoginLog.CreatedAt)
+		if err1 != nil {
+			log.Println("POST request received at /login : Failed to insert login_log : ", userId)
+			result["status_code"] = strconv.Itoa(statusCode)
+			result["message"] = err1.Error()
+			result["data"] = nil
+		}
+	}
+
+	return c.Status(statusCode).JSON(result)
 }

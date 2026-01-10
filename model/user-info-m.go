@@ -15,15 +15,18 @@ type UserInfo struct {
 }
 
 type User struct {
-	ID           uuid.UUID `db:"id" json:"id"`
-	Name         string    `json:"name"`
-	Email        string    `json:"email"`
-	Phone        string    `json:"phone"`
-	IsTrial      bool      `json:"is_trial"`
-	TrialUntil   time.Time `json:"trial_until"`
-	SubsUntil    time.Time `json:"subs_until"`
-	LastPurchase time.Time `json:"last_purchase"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID            uuid.UUID  `db:"id" json:"id"`
+	Name          string     `db:"name" json:"name"`
+	Email         string     `db:"email" json:"email"`
+	Phone         string     `db:"phone" json:"phone"`
+	IsTrial       bool       `db:"is_trial" json:"is_trial"`
+	TrialUntil    *time.Time `db:"trial_until" json:"trial_until"`
+	SubsUntil     time.Time  `db:"subs_until" json:"subs_until"`
+	LastPurchase  time.Time  `db:"last_purchase" json:"last_purchase"`
+	CreatedAt     time.Time  `db:"created_at" json:"created_at"`
+	LastLoginAt   *time.Time `db:"last_login_at" json:"last_login_at"`
+	FailedAttempt int        `db:"failed_attempt" json:"failed_attempt"`
+	LoginAttempt  int        `db:"login_attempt" json:"login_attempt"`
 }
 
 type LoginPayload struct {
@@ -32,13 +35,13 @@ type LoginPayload struct {
 }
 
 type LoginLog struct {
-	ID            uuid.UUID `db:"id" json:"id"`
-	UserID        uuid.UUID `db:"user_id" json:"user_id"`
-	Signature     string    `db:"signature" json:"signature"`
-	DeviceID      string    `db:"device_id" json:"device_id"`
-	FailedAttempt int       `db:"failed_attempt" json:"failed_attempt"`
-	LastLogin     time.Time `db:"last_login" json:"last_login"`
-	CreatedAt     time.Time `db:"created_at" json:"created_at"`
+	ID         uuid.UUID `db:"id" json:"id"`
+	UserID     uuid.UUID `db:"user_id" json:"user_id"`
+	Signature  *string   `db:"signature" json:"signature"`
+	DeviceID   *string   `db:"device_id" json:"device_id"`
+	CreatedAt  time.Time `db:"created_at" json:"created_at"`
+	StatusCode string    `db:"status_code" json:"status_code"`
+	Message    string    `db:"message" json:"message"`
 }
 
 type PurchaseOrder struct {
