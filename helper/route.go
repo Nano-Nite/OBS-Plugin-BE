@@ -129,7 +129,17 @@ func InitRoute(app *fiber.App) {
 			return ReturnResult(c, result, 500, "Internal server error", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
 		}
 
-		return ReturnResult(c, result, 200, "Success", products, true, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+		fProduct := make([]map[string]interface{}, 0)
+		for _, v := range products {
+			log.Println(v.Code, v.URL)
+			m := make(map[string]interface{})
+			m["name"] = v.Code
+			m["url"] = v.URL
+
+			fProduct = append(fProduct, m)
+		}
+
+		return ReturnResult(c, result, 200, "Success", fProduct, true, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
 	})
 
 	app.Post("/login", func(c *fiber.Ctx) error {
@@ -217,7 +227,17 @@ func InitRoute(app *fiber.App) {
 			return ReturnResult(c, result, 500, "Internal server error", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
 		}
 
-		return ReturnResult(c, result, 200, "Success", products, true, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+		fProduct := make([]map[string]interface{}, 0)
+		for _, v := range products {
+			log.Println(v.Code, v.URL)
+			m := make(map[string]interface{})
+			m["name"] = v.Code
+			m["url"] = v.URL
+
+			fProduct = append(fProduct, m)
+		}
+
+		return ReturnResult(c, result, 200, "Success", fProduct, true, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
 	})
 
 	// will be deprecated
