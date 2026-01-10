@@ -446,7 +446,10 @@ func ReturnResult(c *fiber.Ctx, result map[string]interface{}, statusCode int, m
 	result["data"] = data
 
 	LoginLog := new(model.LoginLog)
-	LoginLog.UserID = *userId
+	// LoginLog.UserID = ""
+	if userId != nil {
+		LoginLog.UserID = *userId
+	}
 	LoginLog.Signature = sig
 	LoginLog.DeviceID = deviceID
 	LoginLog.StatusCode = strconv.Itoa(statusCode)
