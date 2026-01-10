@@ -54,11 +54,12 @@ type PurchaseOrder struct {
 }
 
 type Product struct {
-	ID            uuid.UUID `db:"id" json:"id"`
-	Name          string    `db:"name" json:"name"`
-	Code          string    `db:"code" json:"code"`
-	URL           *string   `db:"url" json:"url"`
-	Price         float64   `db:"price" json:"price"`
-	AddedDuration int       `db:"added_duration" json:"added_duration"`
-	CreatedAt     time.Time `db:"created_at" json:"created_at"`
+	ID            uuid.UUID  `db:"id" json:"id"`
+	OwnedBy       *uuid.UUID `db:"owned_by" json:"owned_by"`
+	Name          string     `db:"name" json:"name"`
+	Code          string     `db:"code" json:"code"`
+	URL           *string    `db:"url" json:"url"`
+	Price         float64    `db:"price" json:"price"`
+	AddedDuration int        `db:"added_duration" json:"added_duration"`
+	CreatedAt     time.Time  `db:"created_at" json:"created_at"`
 }

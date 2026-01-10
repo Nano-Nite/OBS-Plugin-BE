@@ -42,6 +42,96 @@ func InitRoute(app *fiber.App) {
 		return c.Status(200).JSON(UserInfo)
 	})
 
+	app.Post("/trial", func(c *fiber.Ctx) error {
+		log.Println("POST request received at /trial")
+		result := make(map[string]interface{})
+		result["status_code"] = "200"
+		result["message"] = ""
+		result["data"] = nil
+
+		LoginPayload := new(model.LoginPayload)
+		log.Println("Body : " + string(c.Body()))
+		if err := c.BodyParser(LoginPayload); err != nil {
+			log.Println("POST request received at /trial : Error parsing body -", err.Error())
+			return ReturnResult(c, result, 500, "Internal server error", nil, false, nil, nil, nil)
+		}
+
+		var Users []*model.User
+		log.Printf("Searching for User with email: %s", LoginPayload.Email)
+		err := pgxscan.Select(c.Context(), DB, &Users, "SELECT * FROM users WHERE email=$1", LoginPayload.Email)
+		if err != nil {
+			log.Println("POST request received at /trial : Error fetching Users -", err.Error())
+			return ReturnResult(c, result, 500, "Internal server error", nil, false, nil, nil, nil)
+		}
+		if len(Users) == 0 {
+			log.Println("POST request received at /trial : No User for email:", LoginPayload.Email)
+			return ReturnResult(c, result, 400, "Bad Request", nil, false, nil, nil, nil)
+		}
+		if !Users[0].IsTrial {
+			log.Println("POST request received at /trial : Not Trial User:", LoginPayload.Email)
+			return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
+		}
+		if Users[0].IsTrial {
+			if Users[0].TrialUntil == nil {
+				log.Println("POST request received at /trial : Not Trial User:", LoginPayload.Email)
+				return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
+			}
+			if Users[0].TrialUntil.Before(getCurrentTime()) {
+				log.Println("POST request received at /trial : Out of Trial Session:", LoginPayload.Email)
+				return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
+			}
+		}
+
+		if os.Getenv("ENV") != "development" && c.Get("postman-token") != "" {
+			log.Println("POST request received at /trial : Unauthorized access attempt")
+			return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
+		}
+
+		if c.Get("x-device-id") == "" || c.Get("x-signature") == "" {
+			log.Println("POST request received at /trial : missing device id or signature")
+			return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
+		}
+
+		HeaderLogin := new(model.HeaderLogin)
+		HeaderLogin.XDeviceID = c.Get("x-device-id")
+		HeaderLogin.XSignature = c.Get("x-signature")
+		LoginPayload.Header = *HeaderLogin
+		sDecode, err := base64.StdEncoding.DecodeString(HeaderLogin.XSignature)
+		if err != nil {
+			log.Println("POST request received at /trial : Error decoding signature -", err.Error())
+			return ReturnResult(c, result, 500, "Internal server error", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+		}
+
+		splitSignature := strings.Split(string(sDecode), "|")
+		if len(splitSignature) != 3 || splitSignature[1] != LoginPayload.Email {
+			log.Println("POST request received at /trial : Invalid signature")
+			return ReturnResult(c, result, 401, "Unathorized", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+		}
+
+		// prevent user not buying the product to login
+		if Users[0].SubsUntil.Before(getCurrentTime()) {
+			log.Println("POST request received at /trial : User out of subscription: ", Users[0].SubsUntil.Format(time.RFC3339))
+			return ReturnResult(c, result, 402, "Payment Required", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+		}
+
+		// fetch product
+		var products []*model.Product
+		log.Println("Searching for products")
+		q := `SELECT * FROM product WHERE (url is not null or url != '') and owned_by is null order by owned_by, code asc`
+
+		err = pgxscan.Select(c.Context(), DB, &products, q)
+		if err != nil {
+			log.Println("POST request received at /trial : Error fetching products -", err.Error())
+			return ReturnResult(c, result, 500, "Internal server error", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+		}
+		if len(products) == 0 {
+			log.Println("POST request received at /trial : No products")
+			return ReturnResult(c, result, 500, "Internal server error", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+		}
+
+		return ReturnResult(c, result, 200, "Success", products, true, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+	})
+
 	app.Post("/login", func(c *fiber.Ctx) error {
 		log.Println("POST request received at /login")
 		result := make(map[string]interface{})
@@ -66,6 +156,18 @@ func InitRoute(app *fiber.App) {
 		if len(Users) == 0 {
 			log.Println("POST request received at /login : No User for email:", LoginPayload.Email)
 			return ReturnResult(c, result, 400, "Bad Request", nil, false, nil, nil, nil)
+		}
+		if Users[0].IsTrial {
+			if Users[0].TrialUntil == nil {
+				log.Println("POST request received at /trial : Not Trial User:", LoginPayload.Email)
+				return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
+			}
+			if Users[0].TrialUntil.Before(getCurrentTime()) {
+				log.Println("POST request received at /trial : Out of Trial Session:", LoginPayload.Email)
+				return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
+			}
+			log.Println("POST request received at /trial : Login not allowed on trial user:", LoginPayload.Email)
+			return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
 		}
 
 		if os.Getenv("ENV") != "development" && c.Get("postman-token") != "" {
@@ -103,9 +205,9 @@ func InitRoute(app *fiber.App) {
 		// fetch product
 		var products []*model.Product
 		log.Println("Searching for products")
-		q := `SELECT * FROM product WHERE url is not null or url != ''`
+		q := `SELECT * FROM product WHERE (url is not null or url != '') or owned_by = $1 order by owned_by, code asc`
 
-		err = pgxscan.Select(c.Context(), DB, &products, q)
+		err = pgxscan.Select(c.Context(), DB, &products, q, &Users[0].ID)
 		if err != nil {
 			log.Println("POST request received at /login : Error fetching products -", err.Error())
 			return ReturnResult(c, result, 500, "Internal server error", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
@@ -385,6 +487,7 @@ func ReturnResult(c *fiber.Ctx, result map[string]interface{}, statusCode int, m
 			result["message"] = err1.Error()
 			result["data"] = nil
 		}
+		log.Println("Response code (" + strconv.Itoa(statusCode) + ") with data : " + fmt.Sprint(data))
 	}
 
 	return c.Status(statusCode).JSON(result)
