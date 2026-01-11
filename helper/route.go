@@ -118,13 +118,9 @@ func InitRoute(app *fiber.App) {
 		var products []*model.Product
 		log.Println("Searching for products")
 		q := `SELECT * FROM product WHERE (owned_by is null and (url is not null or url != '')) or owned_by = $1 order by owned_by, code asc`
-		// if Users[0].SpecialGuest {
-		// 	q = `SELECT * FROM product WHERE url is not null or url != '' order by owned_by, code asc`
-		// 	err = pgxscan.Select(c.Context(), DB, &products, q)
-		// } else {
-		// 	err = pgxscan.Select(c.Context(), DB, &products, q, &Users[0].ID)
-		// }
-
+		if Users[0].SpecialGuest && Users[0].SubsUntil.Before(getCurrentTime()) {
+			q = `SELECT * FROM product WHERE owned_by = $1 order by owned_by, code asc`
+		}
 		err = pgxscan.Select(c.Context(), DB, &products, q, &Users[0].ID)
 		if err != nil {
 			log.Println("POST request received at /trial : Error fetching products -", err.Error())
@@ -212,7 +208,8 @@ func InitRoute(app *fiber.App) {
 		}
 
 		// prevent user not buying the product to login
-		if Users[0].SubsUntil.Before(getCurrentTime()) {
+
+		if !Users[0].SpecialGuest && Users[0].SubsUntil.Before(getCurrentTime()) {
 			log.Println("POST request received at /login : User out of subscription: ", Users[0].SubsUntil.Format(time.RFC3339))
 			return ReturnResult(c, result, 402, "Payment Required", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
 		}
@@ -221,13 +218,9 @@ func InitRoute(app *fiber.App) {
 		var products []*model.Product
 		log.Println("Searching for products")
 		q := `SELECT * FROM product WHERE (owned_by is null and (url is not null or url != '')) or owned_by = $1 order by owned_by, code asc`
-		// if Users[0].SpecialGuest {
-		// 	q = `SELECT * FROM product WHERE url is not null or url != '' order by owned_by, code asc`
-		// 	err = pgxscan.Select(c.Context(), DB, &products, q)
-		// } else {
-		// 	err = pgxscan.Select(c.Context(), DB, &products, q, &Users[0].ID)
-		// }
-
+		if Users[0].SpecialGuest && Users[0].SubsUntil.Before(getCurrentTime()) {
+			q = `SELECT * FROM product WHERE owned_by = $1 order by owned_by, code asc`
+		}
 		err = pgxscan.Select(c.Context(), DB, &products, q, &Users[0].ID)
 		if err != nil {
 			log.Println("POST request received at /login : Error fetching products -", err.Error())
