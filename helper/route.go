@@ -411,11 +411,11 @@ func InitRoute(app *fiber.App) {
 				})
 			}
 			if len(Product) == 0 {
-				log.Println("POST request received at /webhook : Product not found - ", err.Error())
+				log.Println("POST request received at /webhook : Product not found - ", v.Title)
 				_ = tx.Rollback(ctx)
 				return c.Status(500).JSON(fiber.Map{
 					"success": false,
-					"error":   err.Error(),
+					"error":   "Product not found",
 				})
 			}
 
