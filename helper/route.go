@@ -58,7 +58,7 @@ func InitRoute(app *fiber.App) {
 
 		var Users []*model.User
 		log.Printf("Searching for User with email: %s", LoginPayload.Email)
-		err := pgxscan.Select(c.Context(), DB, &Users, "SELECT * FROM users WHERE email=$1", LoginPayload.Email)
+		err := pgxscan.Select(c.Context(), DB, &Users, "SELECT * FROM users WHERE lower(email) = lower($1)", LoginPayload.Email)
 		if err != nil {
 			log.Println("POST request received at /trial : Error fetching Users -", err.Error())
 			return ReturnResult(c, result, 500, "Internal server error", nil, false, nil, nil, nil)
@@ -159,7 +159,7 @@ func InitRoute(app *fiber.App) {
 
 		var Users []*model.User
 		log.Printf("Searching for User with email: %s", LoginPayload.Email)
-		err := pgxscan.Select(c.Context(), DB, &Users, "SELECT * FROM users WHERE email=$1", LoginPayload.Email)
+		err := pgxscan.Select(c.Context(), DB, &Users, "SELECT * FROM users WHERE lower(email) = lower($1)", LoginPayload.Email)
 		if err != nil {
 			log.Println("POST request received at /login : Error fetching Users -", err.Error())
 			return ReturnResult(c, result, 500, "Internal server error", nil, false, nil, nil, nil)
