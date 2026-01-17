@@ -29,5 +29,5 @@ func TTLUntilMidnight() time.Duration {
 		0, 0, 0, 0,
 		time.Now().Location(),
 	)
-	return midnight.Sub(time.Now())
+	return time.Until(midnight)
 }
