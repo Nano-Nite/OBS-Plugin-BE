@@ -174,6 +174,12 @@ func InitRoute(app *fiber.App) {
 		} else {
 			if !Users[0].IsTrial {
 				log.Println("POST request received at /trial : Not Trial User:", LoginPayload.Email)
+				if Users[0].TrialUntil != nil {
+					if Users[0].TrialUntil.Before(getCurrentTime()) {
+						log.Println("POST request received at /trial : Out of Trial Session:", LoginPayload.Email)
+						return ReturnResult(c, result, 402, "Payment Required", nil, false, &Users[0].ID, nil, nil)
+					}
+				}
 				return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
 			}
 			if Users[0].IsTrial {
@@ -246,7 +252,7 @@ func InitRoute(app *fiber.App) {
 			}
 
 			//set redis
-			if err = RedisSet(REDIS_KEY_PRODUCT_TRIAL, fProduct, time.Hour*24); err != nil {
+			if err = RedisSet(REDIS_KEY_PRODUCT_TRIAL, fProduct, TTLUntilMidnight()); err != nil {
 				log.Println("POST request received at /trial : Failed to set Redis > ", err.Error())
 			}
 			return ReturnResult(c, result, 200, "Success", fProduct, true, &selectedUser.ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
@@ -278,6 +284,7 @@ func InitRoute(app *fiber.App) {
 			return ReturnResult(c, result, 500, "Internal server error", nil, false, nil, nil, nil)
 		}
 
+		selectedUser := new(model.User)
 		var Users []*model.User
 		log.Printf("Searching for User with email: %s", LoginPayload.Email)
 		err := pgxscan.Select(c.Context(), DB, &Users, "SELECT * FROM users WHERE lower(email) = lower($1)", LoginPayload.Email)
@@ -335,33 +342,58 @@ func InitRoute(app *fiber.App) {
 			return ReturnResult(c, result, 402, "Payment Required", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
 		}
 
-		// fetch product
-		var products []*model.Product
-		log.Println("Searching for products")
-		q := `SELECT * FROM product WHERE (owned_by is null and (url is not null or url != '')) or owned_by = $1 order by owned_by, code asc`
-		if Users[0].SpecialGuest && Users[0].SubsUntil.Before(getCurrentTime()) {
-			q = `SELECT * FROM product WHERE owned_by = $1 order by owned_by, code asc`
-		}
-		err = pgxscan.Select(c.Context(), DB, &products, q, &Users[0].ID)
+		selectedUser = Users[0]
+
+		// get redis cache
+		cachedProd, err := GetCachedProduct(REDIS_KEY_PRODUCT + "_" + selectedUser.ID.String())
 		if err != nil {
-			log.Println("POST request received at /login : Error fetching products -", err.Error())
-			return ReturnResult(c, result, 500, "Internal server error", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+			log.Println("POST request received at /login : Fail to fetch Redis > ", err.Error())
 		}
-		if len(products) == 0 {
-			log.Println("POST request received at /login : No products")
-			return ReturnResult(c, result, 500, "Internal server error", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+		if cachedProd == nil {
+			log.Println("POST request received at /login : Fail to fetch Redis Product continue fetch db")
+
+			// fetch product
+			var products []*model.Product
+			log.Println("Searching for products")
+			q := `SELECT * FROM product WHERE (owned_by is null and (url is not null or url != '')) or owned_by = $1 order by owned_by, code asc`
+			if Users[0].SpecialGuest && Users[0].SubsUntil.Before(getCurrentTime()) {
+				q = `SELECT * FROM product WHERE owned_by = $1 order by owned_by, code asc`
+			}
+			err = pgxscan.Select(c.Context(), DB, &products, q, selectedUser.ID)
+			if err != nil {
+				log.Println("POST request received at /login : Error fetching products -", err.Error())
+				return ReturnResult(c, result, 500, "Internal server error", nil, false, &selectedUser.ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+			}
+			if len(products) == 0 {
+				log.Println("POST request received at /login : No products")
+				return ReturnResult(c, result, 500, "Internal server error", nil, false, &selectedUser.ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+			}
+			fProduct := make([]map[string]interface{}, 0)
+			for _, v := range products {
+				m := make(map[string]interface{})
+				m["name"] = v.Code
+				m["url"] = v.URL
+
+				fProduct = append(fProduct, m)
+			}
+
+			//set redis
+			if err = RedisSet(REDIS_KEY_PRODUCT+"_"+selectedUser.ID.String(), fProduct, TTLUntilMidnight()); err != nil {
+				log.Println("POST request received at /login : Failed to set Redis > ", err.Error())
+			}
+			return ReturnResult(c, result, 200, "Success", fProduct, true, &selectedUser.ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+		} else {
+			fProduct := make([]map[string]interface{}, 0)
+			for _, v := range cachedProd {
+				m := make(map[string]interface{})
+				m["name"] = v.Name
+				m["url"] = v.URL
+
+				fProduct = append(fProduct, m)
+			}
+
+			return ReturnResult(c, result, 200, "Success", fProduct, true, &selectedUser.ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
 		}
-
-		fProduct := make([]map[string]interface{}, 0)
-		for _, v := range products {
-			m := make(map[string]interface{})
-			m["name"] = v.Code
-			m["url"] = v.URL
-
-			fProduct = append(fProduct, m)
-		}
-
-		return ReturnResult(c, result, 200, "Success", fProduct, true, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
 	})
 
 	// will be deprecated

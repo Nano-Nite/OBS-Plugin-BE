@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	log.Println("Build : 1.0.0")
+	log.Println("Build : ", os.Getenv("BUILD"))
 	InitENV()
 	helper.InitDB()
 	helper.InitRedis()
