@@ -339,7 +339,7 @@ func InitRoute(app *fiber.App) {
 
 		// prevent user not buying the product to login
 
-		if !Users[0].SpecialGuest && Users[0].SubsUntil.Before(getCurrentTime()) {
+		if !Users[0].SpecialGuest && Users[0].SubsUntil.Before(getCurrentTime()) && !Users[0].IsTrial {
 			log.Println("POST request received at /login : User out of subscription: ", Users[0].SubsUntil.Format(time.RFC3339))
 			return ReturnResult(c, result, 402, "Payment Required", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
 		}
