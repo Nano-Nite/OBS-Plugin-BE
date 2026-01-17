@@ -62,5 +62,6 @@ type Product struct {
 	URL           *string    `db:"url" json:"url"`
 	Price         float64    `db:"price" json:"price"`
 	AddedDuration int        `db:"added_duration" json:"added_duration"`
+	EnableTrial   bool       `db:"enable_trial" json:"enable_trial"`
 	CreatedAt     time.Time  `db:"created_at" json:"created_at"`
 }

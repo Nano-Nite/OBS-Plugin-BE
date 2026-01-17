@@ -56,40 +56,14 @@ func InitRoute(app *fiber.App) {
 			return ReturnResult(c, result, 500, "Internal server error", nil, false, nil, nil, nil)
 		}
 
-		var Users []*model.User
-		log.Printf("Searching for User with email: %s", LoginPayload.Email)
-		err := pgxscan.Select(c.Context(), DB, &Users, "SELECT * FROM users WHERE lower(email) = lower($1)", LoginPayload.Email)
-		if err != nil {
-			log.Println("POST request received at /trial : Error fetching Users -", err.Error())
-			return ReturnResult(c, result, 500, "Internal server error", nil, false, nil, nil, nil)
-		}
-		if len(Users) == 0 {
-			log.Println("POST request received at /trial : No User for email:", LoginPayload.Email)
-			return ReturnResult(c, result, 400, "Bad Request", nil, false, nil, nil, nil)
-		}
-		if !Users[0].IsTrial {
-			log.Println("POST request received at /trial : Not Trial User:", LoginPayload.Email)
-			return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
-		}
-		if Users[0].IsTrial {
-			if Users[0].TrialUntil == nil {
-				log.Println("POST request received at /trial : Not Trial User:", LoginPayload.Email)
-				return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
-			}
-			if Users[0].TrialUntil.Before(getCurrentTime()) {
-				log.Println("POST request received at /trial : Out of Trial Session:", LoginPayload.Email)
-				return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
-			}
-		}
-
 		if os.Getenv("ENV") != "development" && c.Get("postman-token") != "" {
 			log.Println("POST request received at /trial : Unauthorized access attempt")
-			return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
+			return ReturnResult(c, result, 401, "Unauthorized", nil, false, nil, nil, nil)
 		}
 
 		if c.Get("x-device-id") == "" || c.Get("x-signature") == "" {
 			log.Println("POST request received at /trial : missing device id or signature")
-			return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
+			return ReturnResult(c, result, 401, "Unauthorized", nil, false, nil, nil, nil)
 		}
 
 		HeaderLogin := new(model.HeaderLogin)
@@ -99,48 +73,195 @@ func InitRoute(app *fiber.App) {
 		sDecode, err := base64.StdEncoding.DecodeString(HeaderLogin.XSignature)
 		if err != nil {
 			log.Println("POST request received at /trial : Error decoding signature -", err.Error())
-			return ReturnResult(c, result, 500, "Internal server error", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+			return ReturnResult(c, result, 500, "Internal server error", nil, false, nil, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
 		}
 
 		splitSignature := strings.Split(string(sDecode), "|")
 		if len(splitSignature) != 3 || splitSignature[1] != LoginPayload.Email {
 			log.Println("POST request received at /trial : Invalid signature")
-			return ReturnResult(c, result, 401, "Unathorized", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+			return ReturnResult(c, result, 401, "Unathorized", nil, false, nil, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
 		}
 
-		// prevent user not buying the product to login
-		if Users[0].SubsUntil.Before(getCurrentTime()) {
-			log.Println("POST request received at /trial : User out of subscription: ", Users[0].SubsUntil.Format(time.RFC3339))
-			return ReturnResult(c, result, 402, "Payment Required", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
-		}
-
-		// fetch product
-		var products []*model.Product
-		log.Println("Searching for products")
-		q := `SELECT * FROM product WHERE (owned_by is null and (url is not null or url != '')) or owned_by = $1 order by owned_by, code asc`
-		if Users[0].SpecialGuest && Users[0].SubsUntil.Before(getCurrentTime()) {
-			q = `SELECT * FROM product WHERE owned_by = $1 order by owned_by, code asc`
-		}
-		err = pgxscan.Select(c.Context(), DB, &products, q, &Users[0].ID)
+		var Users []*model.User
+		log.Printf("Searching for User with email: %s", LoginPayload.Email)
+		err = pgxscan.Select(c.Context(), DB, &Users, "SELECT * FROM users WHERE lower(email) = lower($1)", LoginPayload.Email)
 		if err != nil {
-			log.Println("POST request received at /trial : Error fetching products -", err.Error())
-			return ReturnResult(c, result, 500, "Internal server error", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
-		}
-		if len(products) == 0 {
-			log.Println("POST request received at /trial : No products")
-			return ReturnResult(c, result, 500, "Internal server error", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+			log.Println("POST request received at /trial : Error fetching Users -", err.Error())
+			return ReturnResult(c, result, 500, "Internal server error", nil, false, nil, nil, nil)
 		}
 
-		fProduct := make([]map[string]interface{}, 0)
-		for _, v := range products {
-			m := make(map[string]interface{})
-			m["name"] = v.Code
-			m["url"] = v.URL
+		selectedUser := new(model.User)
 
-			fProduct = append(fProduct, m)
+		// register user as trial
+		if len(Users) == 0 {
+			log.Println("POST request received at /trial : No User found, registering trial user with email:", LoginPayload.Email)
+			log.Println("Getting device ID :", HeaderLogin.XDeviceID)
+
+			var loginLog []*model.LoginLog
+			q := `SELECT * FROM login_log where device_id = $1 and status_code = '200'`
+			err = pgxscan.Select(c.Context(), DB, &loginLog, q, HeaderLogin.XDeviceID)
+			if err != nil {
+				log.Println("POST request received at /trial : Error fetching login log -", err.Error())
+				return ReturnResult(c, result, 500, "Internal server error", nil, false, nil, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+			}
+			log.Println(len(loginLog))
+			if len(loginLog) > 0 {
+				log.Println("POST request received at /trial : Device ID Already Registered")
+				return ReturnResult(c, result, 409, "Conflict", nil, false, nil, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+			}
+
+			addedDay := AddDaysFromNextMidnight(time.Now(), 3)
+
+			User := new(model.User)
+			User.Name = strings.Split(LoginPayload.Email, "@")[0]
+			User.Email = LoginPayload.Email
+			User.Phone = "000000000000"
+			User.SpecialGuest = false
+			User.IsTrial = true
+			User.TrialUntil = &addedDay
+			User.SubsUntil = time.Now()
+			User.LastPurchase = time.Now()
+			User.CreatedAt = time.Now()
+			User.LastLoginAt = nil
+			User.FailedAttempt = 0
+			User.LoginAttempt = 0
+
+			// DB logic
+			tx, err := DB.Begin(context.Background())
+			if err != nil {
+				log.Println("POST request received at /trial : Fail to init DB Transaction > ", err.Error())
+				return ReturnResult(c, result, 500, "Internal server error", nil, false, nil, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+			}
+			defer func() {
+				if err != nil {
+					_ = tx.Rollback(ctx)
+				}
+			}()
+
+			err = tx.QueryRow(
+				context.Background(),
+				`
+			INSERT INTO "users" (name, email, phone, is_trial, trial_until, last_purchase, created_at, special_guest, subs_until, last_login_at, failed_attempt, login_attempt)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			RETURNING id
+			`,
+				User.Name,
+				User.Email,
+				User.Phone,
+				User.IsTrial,
+				User.TrialUntil,
+				User.LastPurchase,
+				User.CreatedAt,
+				User.SpecialGuest,
+				User.SubsUntil,
+				User.LastLoginAt,
+				User.FailedAttempt,
+				User.LoginAttempt,
+			).Scan(&User.ID)
+			if err != nil {
+				_ = tx.Rollback(ctx)
+				log.Println("POST request received at /trial : Fail to Execute DB query > ", err.Error())
+				return ReturnResult(c, result, 500, "Internal server error", nil, false, nil, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+			}
+
+			err = tx.Commit(context.Background())
+			if err != nil {
+				log.Println("POST request received at /trial : Fail to Commit DB Transaction > ", err.Error())
+				return ReturnResult(c, result, 500, "Internal server error", nil, false, nil, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+			}
+			selectedUser = User
+			log.Println("POST request received at /trial : Success registering trial user with email:", User.Email)
+		} else {
+			if !Users[0].IsTrial {
+				log.Println("POST request received at /trial : Not Trial User:", LoginPayload.Email)
+				return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
+			}
+			if Users[0].IsTrial {
+				if Users[0].TrialUntil == nil {
+					log.Println("POST request received at /trial : Not Trial User:", LoginPayload.Email)
+					return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
+				}
+				if Users[0].TrialUntil.Before(getCurrentTime()) {
+					//update is_trial to false
+					// DB logic
+					tx, err := DB.Begin(context.Background())
+					if err != nil {
+						log.Println("POST request received at /trial : Fail to init DB transaction > ", err.Error())
+						return ReturnResult(c, result, 500, "Internal server error", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+					}
+					defer func() {
+						if err != nil {
+							_ = tx.Rollback(ctx)
+						}
+					}()
+
+					_, err = tx.Exec(context.Background(), `UPDATE "users" SET is_trial = false where id = $1`, Users[0].ID)
+					if err != nil {
+						log.Println("POST request received at /trial : Fail to Execute DB query > ", err.Error())
+						return ReturnResult(c, result, 500, "Internal server error", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+					}
+
+					err = tx.Commit(context.Background())
+					if err != nil {
+						log.Println("POST request received at /trial : Fail to Commit DB Transaction > ", err.Error())
+						return ReturnResult(c, result, 500, "Internal server error", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+					}
+
+					log.Println("POST request received at /trial : Out of Trial Session:", LoginPayload.Email)
+					return ReturnResult(c, result, 402, "Payment Required", nil, false, &Users[0].ID, nil, nil)
+				}
+			}
+
+			selectedUser = Users[0]
 		}
 
-		return ReturnResult(c, result, 200, "Success", fProduct, true, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+		// get redis cache
+		cachedProd, err := GetCachedProduct(REDIS_KEY_PRODUCT_TRIAL)
+		if err != nil {
+			log.Println("POST request received at /trial : Fail to fetch Redis > ", err.Error())
+		}
+		if cachedProd == nil {
+			log.Println("POST request received at /trial : Fail to fetch Redis Product continue fetch db")
+
+			// fetch product
+			var products []*model.Product
+			log.Println("Searching for products")
+			q := `SELECT * FROM product WHERE enable_trial is true order by code asc`
+			err = pgxscan.Select(c.Context(), DB, &products, q)
+			if err != nil {
+				log.Println("POST request received at /trial : Error fetching products -", err.Error())
+				return ReturnResult(c, result, 500, "Internal server error", nil, false, &selectedUser.ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+			}
+			if len(products) == 0 {
+				log.Println("POST request received at /trial : No products")
+				return ReturnResult(c, result, 500, "Internal server error", nil, false, &selectedUser.ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+			}
+			fProduct := make([]map[string]interface{}, 0)
+			for _, v := range products {
+				m := make(map[string]interface{})
+				m["name"] = v.Code
+				m["url"] = v.URL
+
+				fProduct = append(fProduct, m)
+			}
+
+			//set redis
+			if err = RedisSet(REDIS_KEY_PRODUCT_TRIAL, fProduct, time.Hour*24); err != nil {
+				log.Println("POST request received at /trial : Failed to set Redis > ", err.Error())
+			}
+			return ReturnResult(c, result, 200, "Success", fProduct, true, &selectedUser.ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+		} else {
+			fProduct := make([]map[string]interface{}, 0)
+			for _, v := range cachedProd {
+				m := make(map[string]interface{})
+				m["name"] = v.Name
+				m["url"] = v.URL
+
+				fProduct = append(fProduct, m)
+			}
+
+			return ReturnResult(c, result, 200, "Success", fProduct, true, &selectedUser.ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+		}
 	})
 
 	app.Post("/login", func(c *fiber.Ctx) error {

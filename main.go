@@ -15,6 +15,7 @@ func main() {
 	log.Println("Build : 1.0.0")
 	InitENV()
 	helper.InitDB()
+	helper.InitRedis()
 
 	app := fiber.New()
 	helper.InitRoute(app)
@@ -29,7 +30,6 @@ func main() {
 }
 
 func InitENV() {
-	// Environment variable initialization logic goes here
 	err := godotenv.Load()
 	if err != nil {
 		log.Println("Error loading .env file")
