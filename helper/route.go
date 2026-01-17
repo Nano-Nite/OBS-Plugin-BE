@@ -346,6 +346,56 @@ func InitRoute(app *fiber.App) {
 
 		selectedUser = Users[0]
 
+		if selectedUser.IsTrial {
+			// get redis cache
+			cachedProd, err := GetCachedProduct(REDIS_KEY_PRODUCT_TRIAL)
+			if err != nil {
+				log.Println("POST request received at /trial : Fail to fetch Redis > ", err.Error())
+			}
+			if cachedProd == nil {
+				log.Println("POST request received at /trial : Fail to fetch Redis Product continue fetch db")
+
+				// fetch product
+				var products []*model.Product
+				log.Println("Searching for products")
+				q := `SELECT * FROM product WHERE enable_trial is true order by code asc`
+				err = pgxscan.Select(c.Context(), DB, &products, q)
+				if err != nil {
+					log.Println("POST request received at /trial : Error fetching products -", err.Error())
+					return ReturnResult(c, result, 500, "Internal server error", nil, false, &selectedUser.ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+				}
+				if len(products) == 0 {
+					log.Println("POST request received at /trial : No products")
+					return ReturnResult(c, result, 500, "Internal server error", nil, false, &selectedUser.ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+				}
+				fProduct := make([]map[string]interface{}, 0)
+				for _, v := range products {
+					m := make(map[string]interface{})
+					m["name"] = v.Code
+					m["url"] = v.URL
+
+					fProduct = append(fProduct, m)
+				}
+
+				//set redis
+				if err = RedisSet(REDIS_KEY_PRODUCT_TRIAL, fProduct, TTLUntilMidnight()); err != nil {
+					log.Println("POST request received at /trial : Failed to set Redis > ", err.Error())
+				}
+				return ReturnResult(c, result, 200, "Success", fProduct, true, &selectedUser.ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+			} else {
+				fProduct := make([]map[string]interface{}, 0)
+				for _, v := range cachedProd {
+					m := make(map[string]interface{})
+					m["name"] = v.Name
+					m["url"] = v.URL
+
+					fProduct = append(fProduct, m)
+				}
+
+				return ReturnResult(c, result, 200, "Success", fProduct, true, &selectedUser.ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
+			}
+		}
+
 		// get redis cache
 		cachedProd, err := GetCachedProduct(REDIS_KEY_PRODUCT + "_" + selectedUser.ID.String())
 		if err != nil {
