@@ -298,15 +298,17 @@ func InitRoute(app *fiber.App) {
 		}
 		if Users[0].IsTrial {
 			if Users[0].TrialUntil == nil {
-				log.Println("POST request received at /trial : Not Trial User:", LoginPayload.Email)
+				log.Println("POST request received at /login : Not Trial User:", LoginPayload.Email)
 				return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
 			}
 			if Users[0].TrialUntil.Before(getCurrentTime()) {
-				log.Println("POST request received at /trial : Out of Trial Session:", LoginPayload.Email)
+				log.Println("POST request received at /login : Out of Trial Session:", LoginPayload.Email)
 				return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
 			}
-			log.Println("POST request received at /trial : Login not allowed on trial user:", LoginPayload.Email)
-			return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
+
+			//! Temporary disabled
+			// log.Println("POST request received at /login : Login not allowed on trial user:", LoginPayload.Email)
+			// return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
 		}
 
 		if os.Getenv("ENV") != "development" && c.Get("postman-token") != "" {
