@@ -666,6 +666,14 @@ func InitRoute(app *fiber.App) {
 
 		return c.Status(200).JSON(User)
 	})
+
+	app.Get("/flush", func(c *fiber.Ctx) error {
+		err := RDB.FlushDB(ctx).Err()
+		if err != nil {
+			return c.SendString("Fail flush redis db: " + err.Error())
+		}
+		return c.SendString("Ready to GO!!!!!!!!")
+	})
 }
 
 func ReturnResult(c *fiber.Ctx, result map[string]interface{}, statusCode int, message string, data interface{}, isSuccess bool, userId *uuid.UUID, sig *string, deviceID *string) error {
