@@ -302,8 +302,8 @@ func InitRoute(app *fiber.App) {
 				return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
 			}
 			if Users[0].TrialUntil.Before(getCurrentTime()) {
-				log.Println("POST request received at /login : Out of Trial Session:", LoginPayload.Email)
-				return ReturnResult(c, result, 401, "Unauthorized", nil, false, &Users[0].ID, nil, nil)
+				log.Println("POST request received at /trial : Out of Trial Session:", LoginPayload.Email)
+				return ReturnResult(c, result, 402, "Payment Required", nil, false, &Users[0].ID, nil, nil)
 			}
 
 			//! Temporary disabled
