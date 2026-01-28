@@ -33,9 +33,9 @@ func InitRoute(app *fiber.App) {
 			headers[string(key)] = string(value)
 		})
 
-		for k, v := range c.GetReqHeaders() {
-			log.Printf("%s: %s", k, v)
-		}
+		log.Println("x-api-key: " + c.Get("x-api-key"))
+		log.Println("x-forwarded-for: " + c.Get("x-forwarded-for"))
+		log.Println("postman-token: " + c.Get("postman-token"))
 		log.Println(string(c.Body()))
 
 		UserInfo := new(model.UserInfo)
