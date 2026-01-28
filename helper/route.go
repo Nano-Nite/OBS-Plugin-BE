@@ -583,7 +583,7 @@ func InitRoute(app *fiber.App) {
 			ON CONFLICT (email) 
 			DO UPDATE SET
 				last_purchase = EXCLUDED.last_purchase
-			RETURNING id
+			RETURNING id, is_trial
 			`,
 			User.Name,
 			User.Email,
@@ -592,7 +592,7 @@ func InitRoute(app *fiber.App) {
 			nil,
 			User.LastPurchase,
 			User.CreatedAt,
-		).Scan(&User.ID)
+		).Scan(&User.ID, &User.IsTrial)
 
 		if err != nil {
 			_ = tx.Rollback(ctx)
@@ -642,18 +642,22 @@ func InitRoute(app *fiber.App) {
 			}
 
 			if strings.Contains(strings.ToLower(v.Title), "trial") {
-				fmt.Println("Trial product purchased, no subscription update.")
-				qa := `UPDATE users SET is_trial = TRUE,
-							trial_until = $1::timestamptz + concat($2::varchar, ' days')::interval
-						WHERE id=$3`
-				_, err = tx.Exec(context.Background(), qa, getCurrentTime(), 3, User.ID)
-				if err != nil {
-					log.Println("POST request received at /webhook : Failed to Update trial user - ", err.Error())
-					_ = tx.Rollback(ctx)
-					return c.Status(500).JSON(fiber.Map{
-						"success": false,
-						"error":   err.Error(),
-					})
+				if User.IsTrial {
+					fmt.Println("User is already on trial, skipping trial update.")
+				} else {
+					fmt.Println("Trial product purchased, no subscription update.")
+					qa := `UPDATE users SET is_trial = TRUE,
+								trial_until = $1::timestamptz + concat($2::varchar, ' days')::interval
+							WHERE id=$3`
+					_, err = tx.Exec(context.Background(), qa, getCurrentTime(), 3, User.ID)
+					if err != nil {
+						log.Println("POST request received at /webhook : Failed to Update trial user - ", err.Error())
+						_ = tx.Rollback(ctx)
+						return c.Status(500).JSON(fiber.Map{
+							"success": false,
+							"error":   err.Error(),
+						})
+					}
 				}
 			} else {
 				fmt.Printf("%s", AddDaysFromNextMidnight(time.Now(), Product[0].AddedDuration))
