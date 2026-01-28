@@ -641,21 +641,37 @@ func InitRoute(app *fiber.App) {
 				})
 			}
 
-			fmt.Printf("%s", AddDaysFromNextMidnight(time.Now(), Product[0].AddedDuration))
-			qa := `UPDATE users SET subs_until = CASE
-						WHEN subs_until IS NULL OR subs_until < $1::timestamptz
-						THEN $1::timestamptz + concat($2::varchar, ' days')::interval
-						ELSE subs_until + concat($2::varchar, ' days')::interval
-					END
-					WHERE id=$3`
-			_, err = tx.Exec(context.Background(), qa, getCurrentTime(), Product[0].AddedDuration, User.ID)
-			if err != nil {
-				log.Println("POST request received at /webhook : Failed to Update subs_until - ", err.Error())
-				_ = tx.Rollback(ctx)
-				return c.Status(500).JSON(fiber.Map{
-					"success": false,
-					"error":   err.Error(),
-				})
+			if strings.Contains(strings.ToLower(v.Title), "trial") {
+				fmt.Println("Trial product purchased, no subscription update.")
+				qa := `UPDATE users SET is_trial = TRUE,
+							trial_until = $1::timestamptz + concat($2::varchar, ' days')::interval
+						WHERE id=$3`
+				_, err = tx.Exec(context.Background(), qa, getCurrentTime(), 3, User.ID)
+				if err != nil {
+					log.Println("POST request received at /webhook : Failed to Update trial user - ", err.Error())
+					_ = tx.Rollback(ctx)
+					return c.Status(500).JSON(fiber.Map{
+						"success": false,
+						"error":   err.Error(),
+					})
+				}
+			} else {
+				fmt.Printf("%s", AddDaysFromNextMidnight(time.Now(), Product[0].AddedDuration))
+				qa := `UPDATE users SET subs_until = CASE
+							WHEN subs_until IS NULL OR subs_until < $1::timestamptz
+							THEN $1::timestamptz + concat($2::varchar, ' days')::interval
+							ELSE subs_until + concat($2::varchar, ' days')::interval
+						END
+						WHERE id=$3`
+				_, err = tx.Exec(context.Background(), qa, getCurrentTime(), Product[0].AddedDuration, User.ID)
+				if err != nil {
+					log.Println("POST request received at /webhook : Failed to Update subs_until - ", err.Error())
+					_ = tx.Rollback(ctx)
+					return c.Status(500).JSON(fiber.Map{
+						"success": false,
+						"error":   err.Error(),
+					})
+				}
 			}
 		}
 
