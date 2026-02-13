@@ -419,7 +419,9 @@ func InitRoute(app *fiber.App) {
 				log.Println("POST request received at /login : No products")
 				return ReturnResult(c, result, 500, "Internal server error", nil, false, &selectedUser.ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
 			}
-			fProduct := make([]map[string]interface{}, 0)
+
+			fProduct := make(map[string]interface{})
+
 			dock := make([]map[string]interface{}, 0)
 			chat := make([]map[string]interface{}, 0)
 			widget := make([]map[string]interface{}, 0)
@@ -438,20 +440,11 @@ func InitRoute(app *fiber.App) {
 				default:
 					log.Println("Don't have category")
 				}
-
 			}
 
-			dockMap := make(map[string]interface{})
-			chatMap := make(map[string]interface{})
-			widgetMap := make(map[string]interface{})
-
-			dockMap["dock"] = dock
-			chatMap["chat"] = chat
-			widgetMap["widget"] = widget
-
-			fProduct = append(fProduct, dockMap)
-			fProduct = append(fProduct, chatMap)
-			fProduct = append(fProduct, widgetMap)
+			fProduct["dock"] = dock
+			fProduct["chat"] = chat
+			fProduct["widget"] = widget
 
 			//set redis
 			if err = RedisSet(REDIS_KEY_PRODUCT+"_"+selectedUser.ID.String(), fProduct, TTLUntilMidnight()); err != nil {
