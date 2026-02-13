@@ -338,7 +338,6 @@ func InitRoute(app *fiber.App) {
 		}
 
 		// prevent user not buying the product to login
-
 		if !Users[0].SpecialGuest && Users[0].SubsUntil.Before(getCurrentTime()) && !Users[0].IsTrial {
 			log.Println("POST request received at /login : User out of subscription: ", Users[0].SubsUntil.Format(time.RFC3339))
 			return ReturnResult(c, result, 402, "Payment Required", nil, false, &Users[0].ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
@@ -421,13 +420,38 @@ func InitRoute(app *fiber.App) {
 				return ReturnResult(c, result, 500, "Internal server error", nil, false, &selectedUser.ID, &HeaderLogin.XSignature, &HeaderLogin.XDeviceID)
 			}
 			fProduct := make([]map[string]interface{}, 0)
+			dock := make([]map[string]interface{}, 0)
+			chat := make([]map[string]interface{}, 0)
+			widget := make([]map[string]interface{}, 0)
 			for _, v := range products {
 				m := make(map[string]interface{})
 				m["name"] = v.Code
 				m["url"] = v.URL
 
-				fProduct = append(fProduct, m)
+				switch strings.ToLower(*v.Category) {
+				case "dock":
+					dock = append(dock, m)
+				case "chat":
+					chat = append(chat, m)
+				case "widget":
+					widget = append(widget, m)
+				default:
+					log.Println("Don't have category")
+				}
+
 			}
+
+			dockMap := make(map[string]interface{})
+			chatMap := make(map[string]interface{})
+			widgetMap := make(map[string]interface{})
+
+			dockMap["dock"] = dock
+			chatMap["chat"] = chat
+			widgetMap["widget"] = widget
+
+			fProduct = append(fProduct, dockMap)
+			fProduct = append(fProduct, chatMap)
+			fProduct = append(fProduct, widgetMap)
 
 			//set redis
 			if err = RedisSet(REDIS_KEY_PRODUCT+"_"+selectedUser.ID.String(), fProduct, TTLUntilMidnight()); err != nil {

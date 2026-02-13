@@ -59,6 +59,7 @@ type Product struct {
 	OwnedBy       *uuid.UUID `db:"owned_by" json:"owned_by"`
 	Name          string     `db:"name" json:"name"`
 	Code          string     `db:"code" json:"code"`
+	Category      *string    `db:"category" json:"category"`
 	URL           *string    `db:"url" json:"url"`
 	Price         float64    `db:"price" json:"price"`
 	AddedDuration int        `db:"added_duration" json:"added_duration"`
