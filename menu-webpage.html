@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CodeLine Café</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+:root{
+    --primary:#0f5132;
+    --secondary:#d4a373;
+    --bg:#f6f3ee;
+    --card:#ffffff;
+    --border:#e7e1d8;
+    --text:#222;
+    --muted:#777;
+}
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+body{
+    font-family:'Poppins',sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    padding:30px 15px;
+}
+
+.container{
+    max-width:1100px;
+    margin:auto;
+}
+
+.header{
+    text-align:center;
+    margin-bottom:30px;
+}
+
+.logo{
+    font-size:3rem;
+    margin-bottom:10px;
+}
+
+.header h1{
+    color:var(--primary);
+    font-size:2.5rem;
+    letter-spacing:2px;
+}
+
+.header p{
+    color:var(--muted);
+}
+
+.grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:25px;
+}
+
+.panel{
+    background:var(--card);
+    border-radius:20px;
+    padding:24px;
+    box-shadow:0 8px 25px rgba(0,0,0,.05);
+    border:1px solid var(--border);
+}
+
+.panel-title{
+    color:var(--primary);
+    font-size:1.4rem;
+    margin-bottom:18px;
+    font-weight:700;
+}
+
+.menu-table{
+    width:100%;
+    border-collapse:collapse;
+}
+
+.menu-table th{
+    text-align:left;
+    padding:12px 8px;
+    border-bottom:2px solid var(--border);
+    color:var(--primary);
+    font-size:.95rem;
+}
+
+.menu-table td{
+    padding:12px 8px;
+    border-bottom:1px solid #f0ece6;
+}
+
+.menu-table tr:last-child td{
+    border-bottom:none;
+}
+
+.menu-name{
+    font-weight:500;
+}
+
+.price{
+    text-align:right;
+    font-weight:600;
+}
+
+.hot{
+    color:#b45309;
+}
+
+.cold{
+    color:#2563eb;
+}
+
+.custom-box{
+    background:#faf8f5;
+    border:1px solid var(--border);
+    border-radius:15px;
+    padding:18px;
+    margin-bottom:15px;
+    width:100%;
+}
+
+.custom-box h3{
+    color:var(--primary);
+    margin-bottom:10px;
+}
+
+.customize-panel{
+    grid-column:1 / -1;
+}
+
+.option{
+    display:flex;
+    justify-content:space-between;
+    padding:8px 0;
+}
+
+.option-price{
+    font-weight:700;
+    color:var(--primary);
+}
+
+.note{
+    margin-top:20px;
+    padding:15px;
+    background:#fff8e7;
+    border-radius:12px;
+    font-size:.9rem;
+    color:#7a5c1d;
+}
+
+.footer{
+    margin-top:25px;
+    text-align:center;
+    color:var(--muted);
+    font-size:.9rem;
+}
+
+.price.hot, .price.cold{
+    text-align:right;
+}
+
+.custom-box-panel{
+    display:flex;
+    gap:20px;
+}
+
+@media(max-width:768px){
+
+    .grid{
+        grid-template-columns:1fr;
+    }
+
+    .header h1{
+        font-size:2rem;
+    }
+
+    .menu-table{
+        font-size:.92rem;
+    }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+    <div class="header">
+        <div class="logo">☕</div>
+        <h1>CodeLine Café</h1>
+        <p>Fresh Coffee • Non-Coffee • V60 Pour Over</p>
+    </div>
+
+    <div class="grid">
+
+        <!-- MENU -->
+        <!-- <div> -->
+
+            <div class="panel">
+                <div class="panel-title">Coffee</div>
+
+                <table class="menu-table">
+                    <thead>
+                        <tr>
+                            <th>Menu</th>
+                            <th class="price hot">Hot</th>
+                            <th class="price cold">Cold</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="menu-name">Double Shot Espresso</td>
+                            <td class="price">8k</td>
+                            <td class="price">-</td>
+                        </tr>
+
+                        <tr>
+                            <td class="menu-name">Long Black / Americano</td>
+                            <td class="price">10k</td>
+                            <td class="price">11k</td>
+                        </tr>
+
+                        <tr>
+                            <td class="menu-name">Kopi Susu Aren</td>
+                            <td class="price">15k</td>
+                            <td class="price">16k</td>
+                        </tr>
+
+                        <tr>
+                            <td class="menu-name">Hazelnut Coffee</td>
+                            <td class="price">15k</td>
+                            <td class="price">16k</td>
+                        </tr>
+
+                        <tr>
+                            <td class="menu-name">Butterscotch Coffee</td>
+                            <td class="price">15k</td>
+                            <td class="price">16k</td>
+                        </tr>
+
+                        <tr>
+                            <td class="menu-name">Caramel Macchiato</td>
+                            <td class="price">-</td>
+                            <td class="price">19k</td>
+                        </tr>
+
+                        <tr>
+                            <td class="menu-name">Dalgona Coffee</td>
+                            <td class="price">-</td>
+                            <td class="price">13k</td>
+                        </tr>
+
+                        <tr>
+                            <td class="menu-name">V60 Arabica Gayo Wine</td>
+                            <td class="price">-</td>
+                            <td class="price">16k</td>
+                        </tr>
+
+                        <tr>
+                            <td class="menu-name">Spanish Ice Latte</td>
+                            <td class="price">14k</td>
+                            <td class="price">15k</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            
+
+            <div class="panel">
+                <div class="panel-title">Non-Coffee</div>
+
+                <table class="menu-table">
+                    <thead>
+                        <tr>
+                            <th>Menu</th>
+                            <th class="price hot">Hot</th>
+                            <th class="price cold">Cold</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+
+                        <tr>
+                            <td class="menu-name">Green Tea</td>
+                            <td class="price">-</td>
+                            <td class="price">10k</td>
+                        </tr>
+
+                        <tr>
+                            <td class="menu-name">Matcha Latte</td>
+                            <td class="price">11k</td>
+                            <td class="price">12k</td>
+                        </tr>
+
+                        <tr>
+                            <td class="menu-name">Thai Tea</td>
+                            <td class="price">-</td>
+                            <td class="price">10k</td>
+                        </tr>
+
+                        <tr>
+                            <td class="menu-name">Thai Tea Latte</td>
+                            <td class="price">11k</td>
+                            <td class="price">12k</td>
+                        </tr>
+
+                    </tbody>
+                </table>
+            </div>
+
+        <!-- </div> -->
+
+        
+    </div>
+
+    <div style="height:20px;"></div>
+    <!-- CUSTOMIZE -->
+    <div>
+
+        <div class="panel customize-panel">
+
+            <div class="panel-title">Customize</div>
+
+            <div class="custom-box-panel">
+                <div class="custom-box">
+                    <h3>🥛 Milk Option</h3>
+    
+                    <div class="option">
+                        <span>Oat Milk</span>
+                        <span class="option-price">+2k</span>
+                    </div>
+                </div>
+    
+                <div class="custom-box">
+                    <h3>📏 Size Upgrade</h3>
+    
+                    <div class="option">
+                        <span>Upsize 16oz</span>
+                        <span class="option-price">+4k</span>
+                    </div>
+                </div>
+    
+                <!-- <div class="custom-box">
+                    <h3>☕ Available Hot & Cold</h3>
+    
+                    <div class="option">
+                        <span>Regular Size</span>
+                        <span>12oz</span>
+                    </div>
+    
+                    <div class="option">
+                        <span>Large Size</span>
+                        <span>16oz</span>
+                    </div>
+                </div> -->
+    
+                
+            </div>
+            
+            
+        </div>
+        <div class="note">
+            Harga dalam ribuan rupiah (k).<br>
+            Beberapa menu hanya tersedia dalam varian Hot atau Cold.
+        </div>
+
+    </div>
+
+    <div class="footer">
+        © 2026 CodeLine Café. All rights reserved.
+    </div>
+
+</div>
+
+</body>
+</html>
